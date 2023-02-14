@@ -12,19 +12,25 @@ const (
 
 var (
 	ErrorParsingOverflow = errors.New("the given string has a number that is too large to parse correctly")
+	ErrorNilPointer      = errors.New("use of a nil pointer as Decimal in call to UnmarshalText")
 )
 
 // Parse a decimal number from a given string, ignoring any unknown characters.
 // `numberStr` is the string you want to parse.
+//
 // Notes:
-// (1) If any part of the whole number is too large to parse will first lose precision, then overflow.
-// (2) Will ignore any unrecognized character.
-// (3) Parses anything after the first 'e' as the exponential.
+//  1. If any part of the whole number is too large to parse will first lose precision, then overflow.
+//  2. Will ignore any unrecognized character.
+//  3. Parses anything after the first 'e' as the exponential.
+//  4. If the number ends with '%' the number will be parsed as a percentage.
+//
 // Examples:
-// (1) "-1!23.45e-23" parses as -12345 * 10 ^ -25
-// (2) "23.e" parses as 23
-// (3) A string composed of 100 digits of "9" parses as 9999999999999999999 * 10 ^ (100 - 19)
-// (4) "9." followed by a string of 100 digits of "9" parses as 9999999999999999999 * 10 ^ -(100  - 18)
+//  1. "-1!23.45e-23" parses as -12345 * 10 ^ -25
+//  2. "12%" parses as 12 * 10 ^ -2
+//  3. "-1!23.45e-23%" parses as -12345 * 10 ^ -27
+//  4. "23.e" parses as 23
+//  5. A string composed of 100 digits of "9" parses as 9999999999999999999 * 10 ^ (100 - 19)
+//  6. "9." followed by a string of 100 digits of "9" parses as 9999999999999999999 * 10 ^ -(100  - 18)
 func ParseString(numberStr string) (Decimal, error) {
 	// Setup defaults
 	decimal := Decimal{
@@ -42,6 +48,12 @@ func ParseString(numberStr string) (Decimal, error) {
 	} else if numberStr[0] == '-' {
 		decimal.Sign = false
 		numberStr = numberStr[1:]
+	}
+	// Check if percentage
+	if len(numberStr) > 1 && numberStr[len(numberStr)-1] == '%' {
+		// 1% == 0.01 == 1e-2
+		decimal.PowerOfTen = -2
+		numberStr = numberStr[:len(numberStr)-1]
 	}
 	// Value (whole + decimal part)
 	digits := uint64(0)
@@ -157,4 +169,13 @@ func ParseString(numberStr string) (Decimal, error) {
 		decimal.PowerOfTen += powerOfTen
 	}
 	return decimal, nil
+}
+
+// Implementation of the TextUnmarshaler interface using the ParseString function
+func (d *Decimal) UnmarshalText(text []byte) (err error) {
+	if d == nil {
+		return ErrorNilPointer
+	}
+	*d, err = ParseString(string(text))
+	return err
 }

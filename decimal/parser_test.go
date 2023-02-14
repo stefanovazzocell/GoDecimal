@@ -23,8 +23,11 @@ func TestParseString(t *testing.T) {
 		".1e10":                        {decimal.Decimal{Sign: true, Value: 1, PowerOfTen: 9}, false},
 		"1e+10":                        {decimal.Decimal{Sign: true, Value: 1, PowerOfTen: 10}, false},
 		"+1":                           {decimal.Decimal{Sign: true, Value: 1, PowerOfTen: 0}, false},
+		"12%":                          {decimal.Decimal{Sign: true, Value: 12, PowerOfTen: -2}, false},
 		"-1":                           {decimal.Decimal{Sign: false, Value: 1, PowerOfTen: 0}, false},
 		"-1!23.45e-23":                 {decimal.Decimal{Sign: false, Value: 12345, PowerOfTen: -25}, false},
+		"-1!23.45e-23%!":               {decimal.Decimal{Sign: false, Value: 12345, PowerOfTen: -25}, false},
+		"-1!23.45e-23%":                {decimal.Decimal{Sign: false, Value: 12345, PowerOfTen: -27}, false},
 		"23.e":                         {decimal.Decimal{Sign: true, Value: 23, PowerOfTen: 0}, false},
 		"90000000000000000000":         {decimal.Decimal{Sign: true, Value: 9000000000000000000, PowerOfTen: 1}, false},
 		"-123456789.0000123456789E123": {decimal.Decimal{Sign: false, Value: 12345678900001234567, PowerOfTen: 112}, false},
@@ -44,16 +47,38 @@ func TestParseString(t *testing.T) {
 		actualNumber, err := decimal.ParseString(numberStr)
 		// Check error
 		if testExpected.hasError && err == nil {
-			t.Errorf("Expected %q to produce an error, instead got nothing", readable)
+			t.Fatalf("Expected %q to produce an error, instead got nothing", readable)
 		}
 		if err != nil && !testExpected.hasError {
-			t.Errorf("%q returned an unexpected error: %v", readable, err)
+			t.Fatalf("%q returned an unexpected error: %v", readable, err)
 		}
 		// Check number
 		if actualNumber.Sign != testExpected.decimal.Sign ||
 			actualNumber.Value != testExpected.decimal.Value ||
 			actualNumber.PowerOfTen != testExpected.decimal.PowerOfTen {
-			t.Errorf("%q expected:\n%v\ninstead got:\n%v", readable, testExpected.decimal, actualNumber)
+			t.Fatalf("%q expected:\n%v\ninstead got:\n%v", readable, testExpected.decimal, actualNumber)
+		}
+		// Reset and try with UnmarshalText
+		actualNumber = decimal.Decimal{}
+		err = actualNumber.UnmarshalText([]byte(numberStr))
+		// Check error
+		if testExpected.hasError && err != decimal.ErrorParsingOverflow {
+			t.Fatalf("Expected %q to produce ErrorParsingOverflow for UnmarshalText, instead got nothing", readable)
+		}
+		if err != nil && !testExpected.hasError || err == decimal.ErrorNilPointer {
+			t.Fatalf("%q returned an unexpected error for UnmarshalText: %v", readable, err)
+		}
+		// Check number
+		if actualNumber.Sign != testExpected.decimal.Sign ||
+			actualNumber.Value != testExpected.decimal.Value ||
+			actualNumber.PowerOfTen != testExpected.decimal.PowerOfTen {
+			t.Fatalf("%q expected:\n%v\nfor UnmarshalText, instead got:\n%v", readable, testExpected.decimal, actualNumber)
+		}
+		// Check that UnmarshalText handles nil values
+		var nilDecimal *decimal.Decimal = nil
+		err = nilDecimal.UnmarshalText([]byte(""))
+		if err != decimal.ErrorNilPointer {
+			t.Fatalf("Unexpected error (or lack there of) from [nil].UnmarshalText: %v", err)
 		}
 	}
 }
@@ -69,19 +94,23 @@ func FuzzParseString(f *testing.F) {
 		"1e10",
 		".1e10",
 		"1e+10",
-		"+1",
-		"-1",
-		"-1!23.45e-23",
+		"1",
+		"1!23.45e-23",
 		"23.e",
 		"90000000000000000000",
-		"-123456789.0000123456789E123",
-		"+987654321.0000987654321e123",
+		"123456789.0000123456789E123",
+		"987654321.0000987654321e123",
 		"1e+" + strconv.FormatInt(math.MaxInt64, 10) + "0",
 		"1e-" + strconv.FormatInt(math.MinInt64, 10) + "0",
 		"1000000000000000000000e" + strconv.FormatInt(math.MaxInt64-1, 10),
 	}
 	for _, seed := range seeds {
 		f.Add(seed)
+		f.Add("+" + seed)
+		f.Add("-" + seed)
+		f.Add(seed + "%")
+		f.Add("+" + seed + "%")
+		f.Add("-" + seed + "%")
 	}
 	f.Fuzz(func(t *testing.T, numberStr string) {
 		decimal.ParseString(numberStr)

@@ -1,6 +1,6 @@
 package decimal
 
-// A representation of a decimal in scientific notation
+// A representation of a decimal number in scientific notation
 type Decimal struct {
 	Sign       bool
 	Value      uint64
