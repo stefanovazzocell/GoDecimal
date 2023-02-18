@@ -42,8 +42,8 @@ fuzz-slow:
 full-test:
 	@echo "[🧪] This test will run a couple of hours, please take a break."
 	@echo "[🧪] Formatting..."
-	@go vet
-	@go fmt
+	@go vet ./...
+	@go fmt ./...
 	@echo "[🧪] Testing... (1/2)"
 	go test --race --cover ./...
 	@echo "[🧪] Testing... (2/2)"
